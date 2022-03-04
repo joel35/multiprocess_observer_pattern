@@ -1,14 +1,4 @@
-"""
-1. Register events
-2. Create process executor
-3. Create observers w/ callbacks
-4. Register callbacks to events
-5. Start process
-
-"""
-import asyncio
 import concurrent.futures
-import functools
 import multiprocessing
 from dataclasses import dataclass
 from time import sleep
@@ -55,7 +45,6 @@ def main():
         futures_manager=futures_manager
     )
 
-    # event_bus.futures_manager = futures_manager
     event_bus.executor_manager = executor_manager
 
     # observers
