@@ -63,25 +63,13 @@ class QueueAdder:
 @dataclass
 class QueueChecker:
     queue: multiprocessing.Queue
-    run_flag: multiprocessing.Event
-    notify_func: Callable
-    wait_len: float
-
-    def loop(self, *args, **kwargs):
-        print('check queue loop starting')
-        while self.run_flag.wait(self.wait_len):
-            try:
-                data = self.queue.get(timeout=self.wait_len)
-                self.notify_func(data)
-            except queue.Empty:
-                continue
-        print('check queue loop stopped')
-
-
-@dataclass
-class QueueChecker2:
-    queue: multiprocessing.Queue
     wait_len: float
 
     def __call__(self, *args, **kwargs):
-        return self.queue.get(timeout=self.wait_len)
+        data = None
+        try:
+            data = self.queue.get(timeout=self.wait_len)
+        except queue.Empty:
+            pass
+        finally:
+            return data
