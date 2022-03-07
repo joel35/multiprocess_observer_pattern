@@ -1,7 +1,8 @@
 import concurrent.futures
 import multiprocessing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import sleep
+from typing import Callable
 
 import data_gen_loop
 import observable
@@ -12,43 +13,27 @@ def main():
     events = [
         'start',
         'stop',
+        'clock_cycle',
         'data_ready',
         'print'
     ]
 
-    fps = 10
+    fps = 100
 
     manager = multiprocessing.Manager()
     queue = manager.Queue()
     run_flag = manager.Event()
-    thread_executor = concurrent.futures.ThreadPoolExecutor()
-    process_executor = concurrent.futures.ProcessPoolExecutor()
 
     # main programme
-    event_bus = observable.EventBus(events)
+    event_bus = observable.EventBus()
 
     notifiers = {
-        event: observable.EventNotifier(event_bus, event)
+        event: observable.ObservableEventNotifier(event_bus, event)
         for event
         in events
     }
 
-    futures_manager = observable.FuturesManager(
-        cancelled_notify=notifiers['print'],
-        error_notify=notifiers['stop'],
-        result_notify=notifiers['print'],
-    )
-
-    executor_manager = observable.ExecutorManager(
-        thread_executor=thread_executor,
-        process_executor=process_executor,
-        futures_manager=futures_manager
-    )
-
-    event_bus.executor_manager = executor_manager
-
-    # observers
-    print_me = observers.PrintMe()
+    clock = Clock(run_flag=run_flag, cycles_per_second=fps, clock_func=notifiers['clock_cycle'])
 
     loop = data_gen_loop.Loop(
         get_func=data_gen_loop.DataGen(data_len=10).generate_data,
@@ -59,30 +44,66 @@ def main():
 
     queue_checker = data_gen_loop.QueueChecker(
         queue=queue,
-        run_flag=run_flag,
-        notify_func=notifiers['data_ready'],
         wait_len=1 / fps
+    )
+
+    count_down = CountDown(
+        run_flag=run_flag,
+        count_notify=print,
+        start=3
     )
 
     run_flag_manager = data_gen_loop.RunFlagManager(run_flag)
 
-    count_down = CountDown(
-        run_flag=run_flag,
-        count_notify=notifiers['print'],
-        end_notify=notifiers['stop'],
-        start=10
+    set_run_flag = observers.Observer(run_flag_manager.set)
+    clear_run_flag = observers.Observer(run_flag_manager.clear)
+    start_count_down = observers.Observer(call_on_notify=count_down, call_on_done=notifiers['stop'])
+
+    check_data_queue = observers.Observer(
+        call_on_notify=queue_checker,
+        call_on_done=notifiers['data_ready'],
     )
 
-    event_bus.register('start', print_me, print_me.callback)
-    event_bus.register('start', run_flag_manager, run_flag_manager.set)
-    event_bus.register('start', loop, loop.start, spawn_new_process=True)
-    event_bus.register('start', queue_checker, queue_checker.loop)
-    event_bus.register('start', count_down, count_down)
+    start_data_gen = observers.Observer(
+        call_on_notify=loop.start,
+        call_on_cancelled=print,
+        spawn_new_process=True,
+        call_on_exception=RaiseException(call_before_raise=notifiers['stop'])
+    )
 
-    event_bus.register('data_ready', print_me, print_me.callback)
-    event_bus.register('stop', print_me, print_me.callback)
-    event_bus.register('stop', run_flag_manager, run_flag_manager.clear)
-    event_bus.register('print', print_me, print_me.callback)
+    start_clock = observers.Observer(call_on_notify=clock.start)
+    printer = observers.Observer(call_on_notify=print)
+
+    start_event_observers = [
+        printer,
+        set_run_flag,
+        start_data_gen,
+        start_clock,
+        start_count_down
+    ]
+
+    clock_cycle_event_observers = [
+        check_data_queue
+    ]
+
+    data_ready_event_observers = [
+        printer
+    ]
+
+    stop_event_observers = [
+        printer,
+        clear_run_flag
+    ]
+
+    registrations = dict(
+        start=start_event_observers,
+        clock_cycle=clock_cycle_event_observers,
+        data_ready=data_ready_event_observers,
+        stop=stop_event_observers
+    )
+
+    for event, obs in registrations.items():
+        [event_bus.register(event, ob) for ob in obs]
 
     event_bus.notify('start', 'Program starting!')
 
@@ -90,8 +111,7 @@ def main():
 @dataclass
 class CountDown:
     run_flag: multiprocessing.Event()
-    count_notify: observable.IEventNotifier
-    end_notify: observable.IEventNotifier
+    count_notify: Callable
     start: int
 
     def __call__(self, *args, **kwargs):
@@ -102,7 +122,42 @@ class CountDown:
             sleep(1)
 
         if self.run_flag.is_set():
-            self.end_notify('Reached zero!')
+            return 'Program Stopping!'
+
+
+class Clock:
+    def __init__(
+            self,
+            run_flag: multiprocessing.Event,
+            cycles_per_second: int,
+            clock_func: Callable[[int], None]
+    ) -> None:
+        self._run_flag = run_flag
+        self._clock_func = clock_func
+        self._wait_length = 1 / cycles_per_second
+
+    def start(self, *args, **kwargs):
+        self._loop()
+
+    def _loop(self):
+        count = 0
+        print('Starting clock')
+        while self._run_flag.wait(self._wait_length):
+            self._clock_func(count)
+            count += 1
+            sleep(self._wait_length)
+
+        print('Stopping clock')
+
+
+@dataclass
+class RaiseException:
+    call_before_raise: Callable = field(default=None)
+
+    def __call__(self, exception: BaseException):
+        if self.call_before_raise:
+            self.call_before_raise(exception)
+        raise exception
 
 
 if __name__ == '__main__':
