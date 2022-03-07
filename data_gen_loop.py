@@ -76,3 +76,12 @@ class QueueChecker:
             except queue.Empty:
                 continue
         print('check queue loop stopped')
+
+
+@dataclass
+class QueueChecker2:
+    queue: multiprocessing.Queue
+    wait_len: float
+
+    def __call__(self, *args, **kwargs):
+        return self.queue.get(timeout=self.wait_len)
