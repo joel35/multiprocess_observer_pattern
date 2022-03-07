@@ -1,10 +1,8 @@
-import concurrent.futures
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Any, Callable
 import concurrent.futures as cf
 
-from chaos import timebomb
 import observers
 
 
@@ -60,8 +58,8 @@ class FutureObjectOutputManager:
 
 
 class ObserverExecutor:
-    thread_executor = concurrent.futures.ThreadPoolExecutor()
-    process_executor = concurrent.futures.ProcessPoolExecutor()
+    thread_executor = cf.ThreadPoolExecutor()
+    process_executor = cf.ProcessPoolExecutor()
 
     def __call__(self, ob_id: int, ob: observers.IObserver, msg: Any) -> None:
         f = self._execute_in_new_process(ob.on_notify, msg) \
