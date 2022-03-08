@@ -37,6 +37,21 @@ class IObservableEventNotifier(ABC):
         pass
 
 
+class IObserverExecutor(ABC):
+    @abstractmethod
+    def __call__(self, ob_id: Any, ob: observers.IObserver, msg: Any) -> None:
+        pass
+
+
+class Singleton:
+    _instances = {}
+
+    def __new__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = object.__new__(cls)
+        return cls._instances[cls]
+
+
 @dataclass
 class FutureObjectOutputManager:
     thread_id: Any
@@ -50,14 +65,13 @@ class FutureObjectOutputManager:
 
         elif exception := fut.exception():
             self.on_exception(exception)
-
         else:
             result = fut.result()
             if result is not None:
                 self.on_done(result)
 
 
-class ObserverExecutor:
+class ObserverExecutor(IObserverExecutor):
     thread_executor = cf.ThreadPoolExecutor()
     process_executor = cf.ProcessPoolExecutor()
 
@@ -83,13 +97,14 @@ class ObserverExecutor:
         )
 
 
-class EventBus(IObservable):
-    _executor = ObserverExecutor()
-    _events = {}
+class EventBus(IObservable, Singleton):
+    _events = {}  # empty dict
 
-    def __init__(self, events: List[str] = None) -> None:
+    def __init__(self, events: list = None, executor: IObserverExecutor = None) -> None:
         if events:
             [self._add_event(event) for event in events]
+
+        self._executor = executor or ObserverExecutor()
 
     @property
     def events(self) -> dict:
