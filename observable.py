@@ -76,10 +76,17 @@ class ObserverExecutor(IObserverExecutor):
     process_executor = cf.ProcessPoolExecutor()
 
     def __call__(self, ob_id: int, ob: observers.IObserver, msg: Any) -> None:
-        f = self._execute_in_new_process(ob.on_notify, msg) \
-            if ob.spawn_new_process \
-            else self._execute_in_new_thread(ob.on_notify, msg)
-        f.add_done_callback(self._get_done_callback(ob_id, ob))
+        try:
+            f = self._execute_in_new_process(ob.on_notify, msg) \
+                if ob.spawn_new_process \
+                else self._execute_in_new_thread(ob.on_notify, msg)
+
+        except RuntimeError as ex:
+            ob.on_notify(msg)
+            raise ex from ex
+
+        else:
+            f.add_done_callback(self._get_done_callback(ob_id, ob))
 
     def _execute_in_new_process(self, func: Callable[[Any], Any], msg: Any) -> cf.Future:
         return self.process_executor.submit(func, msg)
