@@ -1,8 +1,7 @@
-import concurrent.futures
 import multiprocessing
 import queue
+from dataclasses import dataclass
 import random
-from dataclasses import dataclass, field
 from time import sleep
 from typing import Callable, Any
 
@@ -43,9 +42,13 @@ class Loop:
     def loop(self, *args, **kwargs):
         print('data gen loop starting')
         while self.run_flag.wait(timeout=self.wait_len):
-            result = self.get_func(*args, **kwargs)
-            self.put_func(result)
-            sleep(self.wait_len)
+            try:
+                result = self.get_func(*args, **kwargs)
+                self.put_func(result)
+            except Exception as ex:
+                raise ex from ex
+            else:
+                sleep(self.wait_len)
         print('data gen loop stopped')
 
     def start(self, *args, **kwargs):
