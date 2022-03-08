@@ -1,8 +1,7 @@
-import concurrent.futures
 import multiprocessing
 import queue
+from dataclasses import dataclass
 import random
-from dataclasses import dataclass, field
 from time import sleep
 from typing import Callable, Any
 
@@ -43,9 +42,13 @@ class Loop:
     def loop(self, *args, **kwargs):
         print('data gen loop starting')
         while self.run_flag.wait(timeout=self.wait_len):
-            result = self.get_func(*args, **kwargs)
-            self.put_func(result)
-            sleep(self.wait_len)
+            try:
+                result = self.get_func(*args, **kwargs)
+                self.put_func(result)
+            except Exception as ex:
+                raise ex from ex
+            else:
+                sleep(self.wait_len)
         print('data gen loop stopped')
 
     def start(self, *args, **kwargs):
@@ -63,16 +66,13 @@ class QueueAdder:
 @dataclass
 class QueueChecker:
     queue: multiprocessing.Queue
-    run_flag: multiprocessing.Event
-    notify_func: Callable
     wait_len: float
 
-    def loop(self, *args, **kwargs):
-        print('check queue loop starting')
-        while self.run_flag.wait(self.wait_len):
-            try:
-                data = self.queue.get(timeout=self.wait_len)
-                self.notify_func(data)
-            except queue.Empty:
-                continue
-        print('check queue loop stopped')
+    def __call__(self, *args, **kwargs):
+        data = None
+        try:
+            data = self.queue.get(timeout=self.wait_len)
+        except queue.Empty:
+            pass
+        finally:
+            return data
