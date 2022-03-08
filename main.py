@@ -134,6 +134,7 @@ class Clock:
     ) -> None:
         self._run_flag = run_flag
         self._clock_func = clock_func
+        self._cycles_per_second = cycles_per_second
         self._wait_length = 1 / cycles_per_second
 
     def start(self, *args, **kwargs):
@@ -141,7 +142,7 @@ class Clock:
 
     def _loop(self):
         count = 0
-        print('Starting clock')
+        print(f'Starting clock @ {self._cycles_per_second} cycles per second')
         while self._run_flag.wait(self._wait_length):
             self._clock_func(count)
             count += 1
