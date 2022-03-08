@@ -108,6 +108,7 @@ class EventBus(IObservable, Singleton):
     _events = {}  # empty dict
 
     def __init__(self, events: list = None, executor: IObserverExecutor = None) -> None:
+
         if events:
             [self._add_event(event) for event in events]
 
